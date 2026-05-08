@@ -159,6 +159,7 @@ let spawnTimer = 0;
 let gameOver = false;
 let gamePaused = false;
 let gameWin = false;
+let gameStarted = false;
 let frameCount = 0;
 let keys = {};
 let base = { row: 24, col: 12 };  // base position (2x2 block)
@@ -643,6 +644,7 @@ function resetGame() {
   gameOver = false;
   gameWin = false;
   gamePaused = false;
+  gameStarted = false;
   score = 0;
   lives = 3;
   enemiesRemaining = TOTAL_ENEMIES;
@@ -650,12 +652,18 @@ function resetGame() {
   bullets = [];
   explosions = [];
   particles = [];
-  spawnTimer = 0;
+  spawnTimer = SPAWN_DELAY;
   frameCount = 0;
 
   initMap();
   spawnPlayer();
   updateUI();
+}
+
+function startGame() {
+  if (gameStarted) return;
+  gameStarted = true;
+  spawnTimer = SPAWN_DELAY / 2; // brief pause before first enemy
 }
 
 function updateUI() {
@@ -814,6 +822,85 @@ function drawPause() {
   ctx.fillText('按 P 继续', W/2, H/2 + 40);
 }
 
+function drawStartScreen() {
+  // Background
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid lines (decorative)
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < COLS; i++) {
+    for (let j = 0; j < ROWS; j++) {
+      ctx.strokeRect(i * CELL, j * CELL, CELL, CELL);
+    }
+  }
+
+  // Title shadow
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = 'bold 56px "Microsoft YaHei", sans-serif';
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillText('坦克大战', W/2 + 3, H/2 - 90 + 3);
+
+  // Title gradient
+  const grad = ctx.createLinearGradient(W/2 - 120, H/2 - 130, W/2 + 120, H/2 - 50);
+  grad.addColorStop(0, '#f7971e');
+  grad.addColorStop(0.5, '#ffd200');
+  grad.addColorStop(1, '#f7971e');
+  ctx.font = 'bold 56px "Microsoft YaHei", sans-serif';
+  ctx.fillStyle = grad;
+  ctx.fillText('坦克大战', W/2, H/2 - 90);
+
+  // Subtitle
+  ctx.font = '16px "Microsoft YaHei", sans-serif';
+  ctx.fillStyle = '#8899aa';
+  ctx.fillText('BATTLE CITY', W/2, H/2 - 38);
+
+  // Decorative tanks
+  const drawMiniTank = (x, y, facingRight) => {
+    ctx.fillStyle = facingRight ? '#e74c3c' : '#f5a623';
+    ctx.fillRect(x, y + 4, 20, 12);
+    ctx.fillStyle = facingRight ? '#c0392b' : '#d4891a';
+    ctx.fillRect(x + (facingRight ? 14 : 0), y + 6, 6, 8);
+    ctx.fillRect(x + 8, y, 4, 10);
+  };
+  drawMiniTank(130, H/2 - 20, true);
+  drawMiniTank(W - 150, H/2 - 20, false);
+
+  // Instructions box
+  const boxX = 90, boxY = H/2 - 10, boxW = W - 180, boxH = 140;
+  ctx.fillStyle = 'rgba(15,52,96,0.6)';
+  ctx.strokeStyle = 'rgba(168,216,234,0.2)';
+  ctx.lineWidth = 1;
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+  ctx.font = '15px "Microsoft YaHei", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const instructions = [
+    { text: '↑ ↓ ← →   移动坦克', color: '#a8d8ea' },
+    { text: '空格键      发射炮弹', color: '#a8d8ea' },
+    { text: 'P 键          暂停游戏', color: '#a8d8ea' },
+    { text: '消灭全部 20 辆敌军坦克即可获胜', color: '#ffd700' },
+  ];
+  instructions.forEach((item, i) => {
+    ctx.fillStyle = item.color;
+    ctx.fillText(item.text, W/2, boxY + 28 + i * 28);
+  });
+
+  // Start prompt
+  const pulse = Math.sin(Date.now() / 300) * 0.3 + 0.7;
+  ctx.globalAlpha = pulse;
+  ctx.font = 'bold 22px "Microsoft YaHei", sans-serif';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText('按 空格键 或 点击 开始游戏', W/2, H - 55);
+  ctx.globalAlpha = 1;
+}
+
 // ============================================================
 //  INPUT
 // ============================================================
@@ -821,13 +908,18 @@ function drawPause() {
 // Block space scrolling at capture phase (works even if page loses focus)
 window.addEventListener('keydown', (e) => {
   if (e.key === ' ' || e.key === 'Space' || e.keyCode === 32) {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); // stop scrolling — let event continue to document listener
   }
 }, { capture: true, passive: false });
 
 document.addEventListener('keydown', (e) => {
   keys[e.key] = true;
+  if (!gameStarted && !gameOver) {
+    if (e.key === ' ' || e.key === 'Space' || e.key === 'Enter') {
+      startGame();
+    }
+    return;
+  }
   if (e.key === 'p' || e.key === 'P') {
     if (!gameOver && !gameWin) gamePaused = !gamePaused;
   }
@@ -840,13 +932,21 @@ document.addEventListener('keyup', (e) => {
 // Prevent right-click context menu on game area
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// Click or tap canvas to start
+canvas.addEventListener('click', () => {
+  if (!gameStarted && !gameOver) startGame();
+});
+canvas.addEventListener('touchstart', () => {
+  if (!gameStarted && !gameOver) startGame();
+});
+
 document.getElementById('restartBtn').addEventListener('click', resetGame);
 
 // ============================================================
 //  GAME LOOP
 // ============================================================
 function update() {
-  if (gameOver || gameWin || gamePaused) return;
+  if (gameOver || gameWin || gamePaused || !gameStarted) return;
 
   frameCount++;
 
@@ -901,6 +1001,12 @@ function draw() {
   // Clear
   ctx.fillStyle = '#1a1a1a';
   ctx.fillRect(0, 0, W, H);
+
+  // Start screen — full custom draw
+  if (!gameStarted) {
+    drawStartScreen();
+    return;
+  }
 
   // Map
   drawMap();
