@@ -102,7 +102,7 @@ canvas {
       <span>👾 敌人 <em id="enemiesDisplay">20</em></span>
     </div>
   </div>
-  <canvas id="gameCanvas" width="520" height="520"></canvas>
+  <canvas id="gameCanvas" width="520" height="520" tabindex="-1"></canvas>
   <div class="game-footer">
     <div class="controls-hint">↑↓←→ 移动 &nbsp;|&nbsp; 空格 射击 &nbsp;|&nbsp; P 暂停</div>
     <button id="restartBtn">重新开始</button>
@@ -817,19 +817,28 @@ function drawPause() {
 // ============================================================
 //  INPUT
 // ============================================================
+
+// Block space scrolling at capture phase (works even if page loses focus)
+window.addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'Space' || e.keyCode === 32) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, { capture: true, passive: false });
+
 document.addEventListener('keydown', (e) => {
   keys[e.key] = true;
   if (e.key === 'p' || e.key === 'P') {
     if (!gameOver && !gameWin) gamePaused = !gamePaused;
-  }
-  if (e.key === ' ' || e.key === 'Space') {
-    e.preventDefault();
   }
 });
 
 document.addEventListener('keyup', (e) => {
   keys[e.key] = false;
 });
+
+// Prevent right-click context menu on game area
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 document.getElementById('restartBtn').addEventListener('click', resetGame);
 
@@ -930,8 +939,13 @@ function draw() {
 }
 
 function gameLoop() {
-  update();
-  draw();
+  try {
+    update();
+    draw();
+  } catch (e) {
+    console.error('Game error:', e);
+    // Don't freeze — keep the loop running
+  }
   requestAnimationFrame(gameLoop);
 }
 
