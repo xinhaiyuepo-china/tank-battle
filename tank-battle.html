@@ -99,7 +99,7 @@ canvas {
     <div class="stats">
       <span>🏆 得分 <em id="scoreDisplay">0</em></span>
       <span>❤️ 生命 <em id="livesDisplay">3</em></span>
-      <span>👾 敌人 <em id="enemiesDisplay">20</em></span>
+      <span>👾 剩余 <em id="enemiesDisplay">20</em></span>
     </div>
   </div>
   <canvas id="gameCanvas" width="520" height="520" tabindex="-1"></canvas>
@@ -160,6 +160,7 @@ let gameOver = false;
 let gamePaused = false;
 let gameWin = false;
 let gameStarted = false;
+let gameOverReason = '';
 let frameCount = 0;
 let keys = {};
 let base = { row: 24, col: 12 };  // base position (2x2 block)
@@ -176,18 +177,28 @@ function initMap() {
     }
   }
 
-  // Brick walls around base
+  // Brick walls around base — outer layer (destroyable buffer)
   const br = base.row, bc = base.col;
   for (let dr = 0; dr < 2; dr++) {
     for (let dc = -1; dc <= 2; dc++) {
-      if (dc === 0 || dc === 1) continue; // leave base opening
-      map[br - 2 + dr][bc + dc] = 1;
+      if (dc === 0 || dc === 1) continue;
+      map[br - 4 + dr][bc + dc] = 1; // outer brick at rows 20-21, cols 11,14
     }
   }
-  // Close top of base
-  for (let dc = -1; dc <= 2; dc++) {
-    map[br - 4][bc + dc] = 1;
+  map[br - 6][bc] = 1; map[br - 6][bc + 1] = 1; // top brick at row 18, cols 12-13
+
+  // Steel walls around base — inner layer (indestructible)
+  // U-shape: steel on sides, open at top
+  for (let dr = 0; dr < 3; dr++) {
+    map[br - 2 + dr][bc - 1] = 2; // left steel column: rows 22-24, col 11
+    map[br - 2 + dr][bc + 2] = 2; // right steel column: rows 22-24, col 14
   }
+  // Top steel corners connect the sides
+  map[br - 3][bc - 1] = 2; // row 21, col 11
+  map[br - 3][bc + 2] = 2; // row 21, col 14
+  // Steel bar across the top
+  map[br - 3][bc] = 2;     // row 21, col 12
+  map[br - 3][bc + 1] = 2; // row 21, col 13
 
   // Brick clusters throughout the map
   const brickPatterns = [
@@ -415,13 +426,13 @@ class Bullet {
         spawnParticles(cx, cy, '#aaccee', 4);
         return;
       } else if (cell === 3) { // base hit!
-        map[row][col] = 0;
-        map[row+1][col] = 0;
-        map[row][col+1] = 0;
-        map[row+1][col+1] = 0;
+        map[base.row][base.col] = 0;
+        map[base.row][base.col + 1] = 0;
+        map[base.row + 1][base.col] = 0;
+        map[base.row + 1][base.col + 1] = 0;
         this.alive = false;
         spawnExplosion(cx, cy, '#ff4444', 20);
-        triggerGameOver();
+        triggerGameOver('基地被摧毁！');
         return;
       }
     }
@@ -542,7 +553,7 @@ function playerDie() {
   spawnExplosion(player.cx, player.cy, '#ffd700', 20);
   updateUI();
   if (lives <= 0) {
-    triggerGameOver();
+    triggerGameOver('生命用尽！');
   } else {
     // Respawn after delay
     setTimeout(() => {
@@ -626,10 +637,10 @@ function spawnEnemy() {
 // ============================================================
 //  GAME STATE FUNCTIONS
 // ============================================================
-function triggerGameOver() {
+function triggerGameOver(reason) {
   if (gameOver) return;
   gameOver = true;
-  // Massive explosion at base
+  gameOverReason = reason || '基地被摧毁！';
   spawnExplosion((base.col + 0.5) * CELL, (base.row + 0.5) * CELL, '#ff0000', 30);
   setTimeout(() => {
     spawnExplosion((base.col + 0.5) * CELL, (base.row + 1) * CELL, '#ff4400', 20);
@@ -645,6 +656,7 @@ function resetGame() {
   gameWin = false;
   gamePaused = false;
   gameStarted = false;
+  gameOverReason = '';
   score = 0;
   lives = 3;
   enemiesRemaining = TOTAL_ENEMIES;
@@ -767,7 +779,7 @@ function drawHUD() {
 }
 
 function drawGameOver() {
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
   ctx.fillRect(0, 0, W, H);
 
   ctx.textAlign = 'center';
@@ -775,15 +787,21 @@ function drawGameOver() {
 
   ctx.font = 'bold 40px "Microsoft YaHei", sans-serif';
   ctx.fillStyle = '#e74c3c';
-  ctx.fillText('GAME OVER', W/2, H/2 - 30);
+  ctx.fillText('GAME OVER', W/2, H/2 - 60);
 
-  ctx.font = '18px "Microsoft YaHei", sans-serif';
+  // Reason
+  ctx.font = 'bold 22px "Microsoft YaHei", sans-serif';
+  ctx.fillStyle = '#ff6b6b';
+  ctx.fillText(gameOverReason, W/2, H/2 - 12);
+
+  const killed = TOTAL_ENEMIES - enemiesRemaining;
+  ctx.font = '16px "Microsoft YaHei", sans-serif';
   ctx.fillStyle = '#aaa';
-  ctx.fillText('得分: ' + score, W/2, H/2 + 30);
+  ctx.fillText('得分: ' + score + '  |  消灭: ' + killed + ' / ' + TOTAL_ENEMIES, W/2, H/2 + 30);
 
   ctx.font = '14px "Microsoft YaHei", sans-serif';
   ctx.fillStyle = '#667';
-  ctx.fillText('点击「重新开始」再来一局', W/2, H/2 + 70);
+  ctx.fillText('点击「重新开始」再来一局', W/2, H/2 + 65);
 }
 
 function drawWin() {
